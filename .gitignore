@@ -1,4 +1,6 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ============================================================
+# .gitignore - Bajar de Peso (Landing + Guía)
+# ============================================================
 
 # dependencies
 node_modules
@@ -30,25 +32,58 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files (NUNCA commitear .env real - puede tener tokens de MercadoPago)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# ejemplo de env SÍ se commitea
+!.env.example
 
 # vercel
 .vercel
 
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-local-*
-.claude
-.z-ai-config
+
+# logs
 *.log
 dev.log
 dev.out.log
-test
-prompt
-
 server.log
-# Skills directory
+
+# bases de datos locales
+db/*.db
+db/*.db-journal
+db/*.db-shm
+db/*.db-wal
+
+# tool-results y archivos temporales
+tool-results/
+.z-ai-config
+.claude
+local-*
+prompt
+test
+
+# skills
 /skills/
+
+# editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# sistema operativo
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# descargas pesadas (preview local, no necesario en repo)
+download/*.mp4
+download/*.zip
