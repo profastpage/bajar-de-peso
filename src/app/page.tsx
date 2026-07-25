@@ -15,6 +15,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useCountdown } from "@/hooks/use-countdown";
+import { initTracking, trackEvent } from "@/lib/tracking";
+import { ExitIntentPopup } from "@/components/sections/exit-intent-popup";
+import { SocialProofNotifications } from "@/components/sections/social-proof-notifications";
+import { QuizModal } from "@/components/sections/quiz-modal";
+import { QuizCTASection } from "@/components/sections/quiz-cta-section";
+import { ComparisonSection } from "@/components/sections/comparison-section";
+import { GuaranteeBadgeSection } from "@/components/sections/guarantee-badge-section";
 import {
   Flame,
   Clock,
@@ -204,12 +211,21 @@ export default function Home() {
   const { timeLeft, mounted } = useCountdown(24);
   const { toast } = useToast();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [quizOpen, setQuizOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [couponCode, setCouponCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [spotsLeft, setSpotsLeft] = useState(37);
   const [showSticky, setShowSticky] = useState(false);
   const ctaRef = useRef<HTMLDivElement>(null);
+
+  // ============== TRACKING INICIALIZACIÓN ==============
+  useEffect(() => {
+    initTracking();
+    // Disparar ViewContent al cargar
+    trackEvent("ViewContent", { value: 30, currency: "PEN" });
+  }, []);
 
   // Efecto: barra sticky aparece después del hero
   useEffect(() => {
@@ -232,7 +248,27 @@ export default function Home() {
   }, []);
 
   const scrollToCheckout = () => {
+    trackEvent("AddToCart", { value: 30, currency: "PEN" });
     ctaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const openCheckout = () => {
+    trackEvent("InitiateCheckout", { value: 30, currency: "PEN" });
+    setCheckoutOpen(true);
+  };
+
+  const openQuiz = () => {
+    setQuizOpen(true);
+  };
+
+  const handleExitIntentClaimed = (emailValue: string, coupon: string) => {
+    setEmail(emailValue);
+    setCouponCode(coupon);
+    toast({
+      title: "🎁 Cupón activado",
+      description: "Tu 10% extra se aplicará automáticamente en el checkout.",
+      duration: 5000,
+    });
   };
 
   const handleCheckout = async () => {
@@ -250,7 +286,11 @@ export default function Home() {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerName: name, customerEmail: email }),
+        body: JSON.stringify({
+          customerName: name,
+          customerEmail: email,
+          coupon: couponCode,
+        }),
       });
       const data = await res.json();
 
@@ -261,8 +301,21 @@ export default function Home() {
       // En producción: redirigir a MercadoPago
       // Si hay init_point (real), redirige. Si no (demo), muestra toast.
       if (data.init_point && !data.init_point.includes("DEMO")) {
+        // Marcar conversión de checkout iniciado
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("nps_purchased_v1", "1");
+        }
         window.location.href = data.init_point;
       } else {
+        // Modo demo: simular compra para testing de tracking
+        trackEvent("Purchase", {
+          value: couponCode ? 27 : 30,
+          currency: "PEN",
+          email,
+        });
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("nps_purchased_v1", "1");
+        }
         toast({
           title: "✅ Checkout Pro listo (demo)",
           description:
@@ -285,18 +338,29 @@ export default function Home() {
     }
   };
 
-  // Si está en URL el parámetro status=success, mostrar toast
+  // Si está en URL el parámetro status=success, mostrar toast + Purchase event
   useEffect(() => {
     const url = new URL(window.location.href);
     const status = url.searchParams.get("status");
     if (status === "success") {
+      trackEvent("Purchase", {
+        value: couponCode ? 27 : 30,
+        currency: "PEN",
+        email,
+      });
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("nps_purchased_v1", "1");
+      }
       toast({
         title: "¡Pago aprobado! 🎉",
         description: "Revisa tu correo para descargar la guía.",
         duration: 10000,
       });
+      // Limpiar param de URL
+      url.searchParams.delete("status");
+      window.history.replaceState({}, "", url.toString());
     }
-  }, [toast]);
+  }, [toast, email, couponCode]);
 
   return (
     <div className="min-h-screen flex flex-col bg-orange-50/40">
@@ -326,8 +390,14 @@ export default function Home() {
       {/* ===== PROBLEMA / SOLUCIÓN ===== */}
       <ProblemSection />
 
+      {/* ===== TEST DE METABOLISMO (lead magnet) ===== */}
+      <QuizCTASection onOpenQuiz={openQuiz} />
+
       {/* ===== BENEFICIOS ===== */}
       <BenefitsSection />
+
+      {/* ===== COMPARACIÓN: dietas tradicionales vs nuestra guía ===== */}
+      <ComparisonSection />
 
       {/* ===== CONTENIDO DE LA GUÍA ===== */}
       <ContentSection />
@@ -339,19 +409,28 @@ export default function Home() {
       <TestimonialsSection />
 
       {/* ===== PRECIO / OFERTA ===== */}
-      <PriceSection onBuy={() => setCheckoutOpen(true)} timeLeft={timeLeft} mounted={mounted} spotsLeft={spotsLeft} ctaRef={ctaRef} />
+      <PriceSection onBuy={openCheckout} timeLeft={timeLeft} mounted={mounted} spotsLeft={spotsLeft} ctaRef={ctaRef} />
 
-      {/* ===== GARANTÍA ===== */}
-      <GuaranteeSection />
+      {/* ===== GARANTÍA REFORZADA ===== */}
+      <GuaranteeBadgeSection />
 
       {/* ===== FAQ ===== */}
       <FaqSection />
 
       {/* ===== ÚLTIMO CTA ===== */}
-      <FinalCtaSection onBuy={() => setCheckoutOpen(true)} timeLeft={timeLeft} mounted={mounted} />
+      <FinalCtaSection onBuy={openCheckout} timeLeft={timeLeft} mounted={mounted} />
 
       {/* ===== FOOTER ===== */}
       <FooterSection />
+
+      {/* ===== POPUP DE SALIDA (exit-intent) ===== */}
+      <ExitIntentPopup onClaimed={handleExitIntentClaimed} />
+
+      {/* ===== NOTIFICACIONES SOCIALES DE COMPRA ===== */}
+      <SocialProofNotifications />
+
+      {/* ===== MODAL DEL TEST DE METABOLISMO ===== */}
+      <QuizModal open={quizOpen} onOpenChange={setQuizOpen} onBuy={openCheckout} />
 
       {/* ===== STICKY CTA BAR ===== */}
       {showSticky && (
@@ -368,12 +447,19 @@ export default function Home() {
               </p>
               <p className="text-sm md:text-base font-bold text-gray-900 truncate">
                 <span className="text-gray-400 line-through font-normal">S/300</span>{" "}
-                <span className="text-orange-600">S/30</span>{" "}
-                <span className="hidden md:inline text-gray-600 font-normal text-sm">· Acceso inmediato</span>
+                <span className="text-orange-600">{couponCode ? "S/27" : "S/30"}</span>{" "}
+                {couponCode && (
+                  <span className="hidden md:inline text-green-600 font-bold text-xs ml-1">
+                    · 🎁 cupón {couponCode} activo
+                  </span>
+                )}
+                {!couponCode && (
+                  <span className="hidden md:inline text-gray-600 font-normal text-sm">· Acceso inmediato</span>
+                )}
               </p>
             </div>
             <Button
-              onClick={() => setCheckoutOpen(true)}
+              onClick={openCheckout}
               className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold px-4 md:px-8 py-3 md:py-4 rounded-full shadow-lg shadow-orange-500/40 whitespace-nowrap"
             >
               <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 mr-1.5 md:mr-2" />
@@ -402,8 +488,19 @@ export default function Home() {
 
           <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 my-2 text-center">
             <p className="text-xs text-gray-500 line-through">Precio regular: S/300</p>
-            <p className="text-3xl font-black text-orange-600">S/30</p>
-            <p className="text-xs text-gray-600 mt-1">Ahorras S/270 (90% OFF)</p>
+            <p className="text-3xl font-black text-orange-600">
+              {couponCode ? "S/27" : "S/30"}
+            </p>
+            <p className="text-xs text-gray-600 mt-1">
+              {couponCode ? (
+                <>
+                  Ahorras S/273 (90% OFF + 10% extra cupón{" "}
+                  <span className="font-mono font-bold text-green-700">{couponCode}</span>)
+                </>
+              ) : (
+                "Ahorras S/270 (90% OFF)"
+              )}
+            </p>
           </div>
 
           <div className="space-y-3 py-2">
@@ -465,7 +562,7 @@ export default function Home() {
               ) : (
                 <>
                   <Lock className="h-5 w-5 mr-2" />
-                  PAGAR S/30 CON MERCADOPAGO
+                  PAGAR {couponCode ? "S/27" : "S/30"} CON MERCADOPAGO
                 </>
               )}
             </AlertDialogAction>
